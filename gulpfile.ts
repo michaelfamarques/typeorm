@@ -4,6 +4,7 @@
 
 import {Gulpclass, Task, SequenceTask, MergedTask} from "gulpclass";
 
+const argv = require('yargs').argv;
 const gulp = require("gulp");
 const del = require("del");
 const shell = require("gulp-shell");
@@ -18,6 +19,7 @@ const istanbul = require("gulp-istanbul");
 const remapIstanbul = require("remap-istanbul/lib/gulpRemapIstanbul");
 const ts = require("gulp-typescript");
 const args = require("yargs").argv;
+const simplegit = require('simple-git');
 
 @Gulpclass()
 export class Gulpfile {
@@ -230,6 +232,21 @@ export class Gulpfile {
             ],
         ];
     }
+
+    /**
+     * Runs ts linting to validate source code.
+     */
+    @Task()
+    deployGitLocal() {
+        if(!argv.m) throw new Error('Você deve informar o comentário do commit (Parâmetro -m)')
+        simplegit()
+            .cwd('./build/package')
+            .init()
+            .add('./*')
+            .commit(argv.m)
+            .addRemote('origin', 'git@github.com:michaelfamarques/typeorm-av.git')
+            .push('origin', 'master', {'--force': null});
+    }    
 
     /**
      * Creates a package and publishes it to npm.

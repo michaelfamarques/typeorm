@@ -66,6 +66,7 @@
     "redis": "^2.8.0",
     "remap-istanbul": "^0.11.0",
     "rimraf": "^2.6.2",
+    "simple-git": "^1.107.0",
     "sinon": "^2.4.1",
     "sinon-chai": "^2.13.0",
     "source-map-support": "^0.5.4",
@@ -74,7 +75,8 @@
     "ts-node": "^5.0.0",
     "tslint": "^5.9.1",
     "tslint-stylish": "^2.1.0",
-    "typescript": "^2.8.1"
+    "typescript": "^2.8.1",
+    "yargs": "^11.1.0"
   },
   "dependencies": {
     "app-root-path": "^2.0.1",
@@ -88,8 +90,7 @@
     "mkdirp": "^0.5.1",
     "reflect-metadata": "^0.1.12",
     "xml2js": "^0.4.17",
-    "yargonaut": "^1.1.2",
-    "yargs": "^11.1.0"
+    "yargonaut": "^1.1.2"
   },
   "lint-staged": {
     "*.ts": [

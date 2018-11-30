@@ -94,8 +94,12 @@ export class FindOperator<T> {
                 }
             case "lessThan":
                 return `${aliasPath} < ${parameters[0]}`;
+            case "lessThanEqual":
+                return `${aliasPath} <= ${parameters[0]}`;
             case "moreThan":
                 return `${aliasPath} > ${parameters[0]}`;
+            case "moreThanEqual":
+                return `${aliasPath} >= ${parameters[0]}`;
             case "equal":
                 return `${aliasPath} = ${parameters[0]}`;
             case "like":

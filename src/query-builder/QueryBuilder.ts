@@ -18,6 +18,15 @@ import {SqlServerDriver} from "../driver/sqlserver/SqlServerDriver";
 import {OracleDriver} from "../driver/oracle/OracleDriver";
 import {EntitySchema} from "../";
 import {FindOperator} from "../find-options/FindOperator";
+import { Not } from "../find-options/operator/Not";
+import { LessThan } from "../find-options/operator/LessThan";
+import { LessThanEqual } from "../find-options/operator/LessThanEqual";
+import { MoreThan } from "../find-options/operator/MoreThan";
+import { MoreThanEqual } from "../find-options/operator/MoreThanEqual";
+import { Any } from "../find-options/operator/Any";
+import { Equal } from "../find-options/operator/Equal";
+import { In } from "../find-options/operator/In";
+import { Between } from "../find-options/operator/Between";
 
 // todo: completely cover query builder with tests
 // todo: entityOrProperty can be target name. implement proper behaviour if it is.
@@ -722,7 +731,7 @@ export abstract class QueryBuilder<Entity> {
     /**
      * Computes given where argument - transforms to a where string all forms it can take.
      */
-    protected computeWhereParameter(where: string|((qb: this) => string)|Brackets|ObjectLiteral|ObjectLiteral[]) {
+    protected computeWhereParameter(where: string|((qb: this) => string)|Brackets|ObjectLiteral|ObjectLiteral[], indexOuterWhere: number = 0) {
         if (typeof where === "string")
             return where;
 
@@ -744,15 +753,21 @@ export abstract class QueryBuilder<Entity> {
             if (this.expressionMap.mainAlias!.hasMetadata) {
                 andConditions = wheres.map((where, whereIndex) => {
                     const propertyPaths = EntityMetadata.createPropertyPath(this.expressionMap.mainAlias!.metadata, where);
-
+                    let i = 1;
                     return propertyPaths.map((propertyPath, propertyIndex) => {
+                        if(propertyPath === "$or" || propertyPath === "$and"){
+                            let parameterValue = where[propertyPath];
+                            if(Array.isArray(parameterValue)){
+                                return " ( " + parameterValue.map((parameter) => this.computeWhereParameter(parameter, indexOuterWhere + i++))
+                                    .filter(expression => !!expression).join(" "+( propertyPath === "$or" ? "OR" : "AND" )+" ") + " ) ";
+                            }
+                            return null;
+                        }
                         const columns = this.expressionMap.mainAlias!.metadata.findColumnsWithPropertyPath(propertyPath);
                         return columns.map((column, columnIndex) => {
-
                             const aliasPath = this.expressionMap.aliasNamePrefixingEnabled ? `${this.alias}.${propertyPath}` : column.propertyPath;
                             let parameterValue = column.getEntityValue(where, true);
-                            const parameterName = "where_" + whereIndex + "_" + propertyIndex + "_" + columnIndex;
-
+                            const parameterName = "where_" + indexOuterWhere + "_" + whereIndex + "_" + propertyIndex + "_" + columnIndex;
                             if (parameterValue === null) {
                                 return `${aliasPath} IS NULL`;
 
@@ -767,7 +782,28 @@ export abstract class QueryBuilder<Entity> {
                                     });
                                 }
                                 return parameterValue.toSql(this.connection, aliasPath, parameters);
-
+                            } else if(parameterValue instanceof Object){
+                                let operationsArray = []
+                                for(var findOp in parameterValue){
+                                    switch(findOp){
+                                        case "$not":        operationsArray.push({ [propertyPath]: Not(parameterValue[findOp]) }); break;
+                                        case "$lt":         operationsArray.push({ [propertyPath]: LessThan(parameterValue[findOp]) }); break;
+                                        case "$lte":        operationsArray.push({ [propertyPath]: LessThanEqual(parameterValue[findOp]) }); break;
+                                        case "$gt":         
+                                        case "$mt":         operationsArray.push({ [propertyPath]: MoreThan(parameterValue[findOp]) }); break;
+                                        case "$gte":        
+                                        case "$mte":        operationsArray.push({ [propertyPath]: MoreThanEqual(parameterValue[findOp]) }); break;
+                                        case "$any":        operationsArray.push({ [propertyPath]: Any(parameterValue[findOp]) }); break;
+                                        case "$eq":         operationsArray.push({ [propertyPath]: Equal(parameterValue[findOp]) }); break;
+                                        case "$in":         operationsArray.push({ [propertyPath]: In(parameterValue[findOp]) }); break;
+                                        case "$between":    
+                                            if(!Array.isArray(parameterValue[findOp])) continue;
+                                            operationsArray.push({ [propertyPath]: Between(parameterValue[findOp][0], parameterValue[findOp][1]) }); break;
+                                    }
+                                }
+                                if( operationsArray.length == 0 ) return "";
+                                return " ( " + operationsArray.map((parameter) => this.computeWhereParameter(parameter, indexOuterWhere + i++))
+                                    .filter(expression => !!expression).join(" AND ") + " ) ";
                             } else {
                                 this.expressionMap.nativeParameters[parameterName] = parameterValue;
                                 parameterIndex++;
