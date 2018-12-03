@@ -731,7 +731,7 @@ export abstract class QueryBuilder<Entity> {
     /**
      * Computes given where argument - transforms to a where string all forms it can take.
      */
-    protected computeWhereParameter(where: string|((qb: this) => string)|Brackets|ObjectLiteral|ObjectLiteral[], indexOuterWhere: number = 0) {
+    protected computeWhereParameter(where: string|((qb: this) => string)|Brackets|ObjectLiteral|ObjectLiteral[], indexWhere: number = 0) {
         if (typeof where === "string")
             return where;
 
@@ -753,21 +753,26 @@ export abstract class QueryBuilder<Entity> {
             if (this.expressionMap.mainAlias!.hasMetadata) {
                 andConditions = wheres.map((where, whereIndex) => {
                     const propertyPaths = EntityMetadata.createPropertyPath(this.expressionMap.mainAlias!.metadata, where);
+                    //Counter for modifying indexWhere for internal wheres
                     let i = 1;
                     return propertyPaths.map((propertyPath, propertyIndex) => {
+                        //Working with AND and OR conditionals
                         if(propertyPath === "$or" || propertyPath === "$and"){
                             let parameterValue = where[propertyPath];
                             if(Array.isArray(parameterValue)){
-                                return " ( " + parameterValue.map((parameter) => this.computeWhereParameter(parameter, indexOuterWhere + i++))
-                                    .filter(expression => !!expression).join(" "+( propertyPath === "$or" ? "OR" : "AND" )+" ") + " ) ";
+                                let andOrConditions = parameterValue.map((parameter) => this.computeWhereParameter(parameter, indexWhere + i++))
+                                .filter(expression => !!expression);
+                                return andOrConditions.length > 0 ? " ( " + andOrConditions.join(" "+( propertyPath === "$or" ? "OR" : "AND" )+" ") + " ) " : "";
+
                             }
-                            return null;
+                            return "";
+
                         }
                         const columns = this.expressionMap.mainAlias!.metadata.findColumnsWithPropertyPath(propertyPath);
                         return columns.map((column, columnIndex) => {
                             const aliasPath = this.expressionMap.aliasNamePrefixingEnabled ? `${this.alias}.${propertyPath}` : column.propertyPath;
                             let parameterValue = column.getEntityValue(where, true);
-                            const parameterName = "where_" + indexOuterWhere + "_" + whereIndex + "_" + propertyIndex + "_" + columnIndex;
+                            const parameterName = "where_" + indexWhere + "_" + whereIndex + "_" + propertyIndex + "_" + columnIndex;
                             if (parameterValue === null) {
                                 return `${aliasPath} IS NULL`;
 
@@ -782,6 +787,7 @@ export abstract class QueryBuilder<Entity> {
                                     });
                                 }
                                 return parameterValue.toSql(this.connection, aliasPath, parameters);
+
                             } else if(parameterValue instanceof Object){
                                 let operationsArray = []
                                 for(var findOp in parameterValue){
@@ -802,13 +808,17 @@ export abstract class QueryBuilder<Entity> {
                                     }
                                 }
                                 if( operationsArray.length == 0 ) return "";
-                                return " ( " + operationsArray.map((parameter) => this.computeWhereParameter(parameter, indexOuterWhere + i++))
-                                    .filter(expression => !!expression).join(" AND ") + " ) ";
+                                operationsArray = operationsArray.map((parameter) => this.computeWhereParameter(parameter, indexWhere + i++))
+                                    .filter(expression => !!expression);
+
+                                return operationsArray.length > 0 ? " ( " + operationsArray.join(" AND ") + " ) " : "";
+
                             } else {
                                 this.expressionMap.nativeParameters[parameterName] = parameterValue;
                                 parameterIndex++;
                                 const parameter = this.connection.driver.createParameter(parameterName, parameterIndex - 1);
                                 return `${aliasPath} = ${parameter}`;
+
                             }
 
                         }).filter(expression => !!expression).join(" AND ");
@@ -828,6 +838,7 @@ export abstract class QueryBuilder<Entity> {
                             this.expressionMap.nativeParameters[parameterName] = parameterValue;
                             parameterIndex++;
                             return `${aliasPath} = ${this.connection.driver.createParameter(parameterName, parameterIndex - 1)}`;
+
                         }
                     }).join(" AND ");
                 });
